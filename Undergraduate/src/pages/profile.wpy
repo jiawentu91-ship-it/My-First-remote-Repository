@@ -1,0 +1,284 @@
+<template>
+  <BaseContainer navTitle="我的">
+    <view slot="qy-content">
+      <view class="container" slot="qy-content">
+        <view class="info-card" style="background-image:url({{graduateIdentity ? 'https://static.airbob.org/under-graduate/memory/card.png' : 'https://static.airbob.org/under-graduate/userpage/mine_pic_card.png'}})">
+          <view class="main-info">
+            <view class="main-info-avatar">
+              <open-data type="userAvatarUrl"></open-data>
+            </view>
+            <!-- <image class="main-info-avatar" mode="aspectFit" src="{{avatar}}"/> -->
+            <view class="main-info-name">
+              <view class="main-info-name-items" style="font-size:32rpx">{{name}}</view>
+              <view class="main-info-name-items" style="margin-top:15rpx">
+                已绑定的手机号：{{phoneNumber}}
+                <view class="change-phonenumber" @tap="goChangePhone"></view>
+              </view>
+            </view>
+          </view>
+        </view>
+        <view class="function-line">
+          <view
+            class="function-line-image"
+            style="background-image:url('https://static.airbob.org/under-graduate/userpage/mine_icon_help.png')"
+          ></view>
+          <view class="function-line-content" @tap="goFeedback">
+            帮助与反馈
+            <view class="function-line-arrow"></view>
+          </view>
+        </view>
+        <view class="function-line">
+          <view
+            class="function-line-image"
+            style="background-image:url('https://static.airbob.org/changePassword/QjE2MDEyMzI3LWNoYW5nZVBhc3N3b3JkLnBuZw==')"
+          ></view>
+          <view class="function-line-content" @tap="goChangePassword">
+            修改密码
+            <view class="function-line-arrow"></view>
+          </view>
+        </view>
+        <view class="function-line">
+          <view
+            class="function-line-image"
+            style="background-image:url('https://static.airbob.org/under-graduate/userpage/mine_icon_about.png')"
+          ></view>
+          <view class="function-line-content" @tap="goAboutUs">
+            关于我们
+            <view class="function-line-arrow"></view>
+          </view>
+        </view>
+        <!-- <view class="function-line">
+          <view class="function-line-image" style="background-image:url('https://static.airbob.org/under-graduate/userpage/mine_icon_join.png')"></view>
+          <view class="function-line-content">加入我们<view class="function-line-arrow"></view></view>
+        </view>-->
+        <view class="function-line">
+          <view
+            class="function-line-image"
+            style="background-image:url('https://static.airbob.org/under-graduate/userpage/mine_icon_changelog.png')"
+          ></view>
+          <view class="function-line-content" @tap="goChangelog">
+            更新日志
+            <view class="function-line-arrow"></view>
+          </view>
+        </view>
+        <view class="cancel-bind" @tap="bindJudge">{{loginText}}</view>
+        <button wx:if="{{graduateIdentity}}" class="btn close-btn" @tap="close"><span>关闭“记忆模式”</span></button>
+      </view>
+    </view>
+  </BaseContainer>
+</template>
+
+<script>
+import wepy from "wepy";
+import { signOut } from "@/api/common";
+import navigation from "@/components/qy-navigation";
+import BaseContainer from "@/components/baseContainer";
+import { chooseMemoryMode } from "@/api/graduateMode";
+import { connect } from "wepy-redux";
+@connect({
+  graduateIdentity(state) {
+    return state.graduateReducer.graduateIdentity;
+  }
+})
+export default class Profile extends wepy.page {
+  config = {
+    navigationBarTitleText: "我的"
+  };
+  components = {
+    BaseContainer
+  };
+  mixins = [];
+
+  data = {
+    phoneNumber: "",
+    name: "",
+    loginText: "退出登录",
+    visitorModeStatus: false
+  };
+
+  computed = {};
+
+  methods = {
+    goChangePhone() {
+      if (this.visitorModeStatus) {
+        return this.$invoke("BaseContainer", "showVisitorTips");
+      }
+      this.$navigate({
+        url: "../others-page/pages/personalPages/change-phone"
+      });
+    },
+    goFeedback() {
+      this.$navigate({
+        url: "../others-page/pages/feedbackPages/feedback"
+      });
+    },
+    goAboutUs() {
+      this.$navigate({
+        url: "../others-page/pages/personalPages/aboutus"
+      });
+    },
+    goChangelog() {
+      this.$navigate({
+        url: "../others-page/pages/personalPages/changelog"
+      });
+    },
+    async goChangePassword() {
+      this.$navigate({
+        url: "../others-page/pages/personalPages/change-password"
+      });
+    },
+    bindJudge() {
+      if (this.loginText === "退出登录") {
+        wepy
+          .showModal({
+            title: "即将登出",
+            content: "您确定将登出吗",
+            confirmColor: "#47CFF5"
+          })
+          .then(response => {
+            if (response.confirm) {
+              signOut().then(res => {
+                if (res.data.data) {
+                  wepy.clearStorage();
+                  wepy.redirectTo({
+                    url: "/others-page/pages/login?step=1"
+                  });
+                }
+              });
+            }
+          });
+      } else {
+        wepy.$store.dispatch({ type: `EXIT_VISITOR_MODE` });
+        wepy.redirectTo({ url: "/others-page/pages/login?step=1" });
+      }
+    },
+    async close() {
+      const modalData = await wepy.showModal({
+        content: "操作不可逆，是否继续？",
+        confirmColor: "#dc8545"
+      });
+      if (modalData.confirm) {
+        const {
+          data: { success }
+        } = await chooseMemoryMode(0);
+        if (success) {
+          wepy.clearStorage();
+        }
+      }
+    }
+  };
+
+  events = {};
+  onLoad() {
+    this.visitorModeStatus = this.$com.BaseContainer.visitorModeStatus;
+    const { nativeInformation, name, studentId } = wepy.getStorageSync("User");
+    this.phoneNumber = nativeInformation
+      ? nativeInformation.phoneNumber
+      : "xxxxxxxxxxx";
+    this.loginText = nativeInformation ? "退出登录" : "退出游客模式";
+    this.name = name || wepy.getStorageSync("userInfo").name || "游客";
+  }
+}
+</script>
+
+<style lang="stylus">
+.container
+  width 750rpx
+  .btn
+    width 700rpx
+    height 80rpx
+    border-radius 80rpx
+    color #fff
+    font-size 32rpx
+    display flex
+    align-items center
+    justify-content center
+  .close-btn
+    background-image linear-gradient(82deg, #d78f58 0%, #ba6733 100%),linear-gradient(#f2f2f2, #f2f2f2)
+  .info-card
+    position relative
+    display flex
+    width 750rpx
+    height 390rpx
+    background-position center
+    background-repeat no-repeat
+    background-size contain
+    margin-bottom 60rpx
+    .main-info
+      position relative
+      width 750rpx
+      height 150rpx
+      margin-top 120rpx
+      display flex
+      .main-info-avatar
+        display inline-block
+        width 150rpx
+        height 150rpx
+        margin 0 30rpx 0 60rpx
+        border-radius 50%
+        overflow hidden
+      .main-info-name
+        display inline-block
+        margin-top 25rpx
+        height 100rpx
+        color #fff
+        font-size 24rpx
+        .main-info-name-items
+          height 50rpx
+          display flex
+          line-height 50rpx
+          .change-phonenumber
+            display inline-block
+            margin-left 16rpx
+            width 50rpx
+            height 50rpx
+            background-image url('https://static.airbob.org/under-graduate/phonenum.png')
+            background-repeat no-repeat
+            background-size contain
+            background-position center
+  .function-line
+    position relative
+    width 750rpx
+    height 80rpx
+    display flex
+    align-items center
+    .function-line-image
+      position relative
+      display inline-block
+      width 150rpx
+      height 40rpx
+      background-position center
+      background-repeat no-repeat
+      background-size contain
+    .function-line-content
+      position relative
+      display inline-block
+      font-size 32rpx
+      color #353535
+      width 600rpx
+      height 80rpx
+      line-height 80rpx
+      border-bottom 1rpx solid #F4F4F4
+      .function-line-arrow
+        position absolute
+        width 30rpx
+        height 30rpx
+        top 25rpx
+        right 25rpx
+        background-image url('https://static.airbob.org/under-graduate/userpage/button_right.png')
+        background-position center
+        background-repeat no-repeat
+        background-size contain
+  .cancel-bind
+    width 700rpx
+    font-size 32rpx
+    color #fff
+    height 80rpx
+    line-height 80rpx
+    margin-left 25rpx
+    margin-top 100rpx
+    margin-bottom 15rpx
+    border-radius 50rpx
+    text-align center
+    background linear-gradient(-255deg, #ABDCFF 0%, #6AE4FF 100%)
+</style>

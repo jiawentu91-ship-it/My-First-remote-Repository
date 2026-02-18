@@ -1,0 +1,39 @@
+<template>
+  <view>
+    <qy-navigation :title="navTitle"></qy-navigation>
+    <block wx:hidden="{{token === ''}}">
+      <web-view class="webview" src="{{REQUEST_URL}}?token={{token}}"></web-view>
+    </block>
+  </view>
+</template>
+
+<script>
+import wepy from "wepy";
+import navigation from "@/components/qy-navigation";
+
+export default class extends wepy.page {
+  config = {
+    navigationBarTitleText: ""
+  };
+  components = {
+    "qy-navigation": navigation
+  };
+  data = {
+    navTitle: "",
+    token: "",
+    REQUEST_URL: ""
+  };
+
+  onLoad(option) {
+    this.REQUEST_URL = option.link;
+    this.token = wepy.getStorageSync("token");
+    this.$apply();
+  }
+}
+</script>
+
+<style lang="stylus" scoped>
+.webview
+  width 100vw
+  height 100vh
+</style>

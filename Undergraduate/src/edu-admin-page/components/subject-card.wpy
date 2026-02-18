@@ -1,0 +1,186 @@
+<template>
+	<view class="container {{isFinished ?'finished-container':''}}" style="{{isFinished&&!show?'height:86rpx;':''}}" >
+		<view class="unfinish" wx:if="{{!isFinished}}">
+      <movable-area>
+        <movable-view damping="200" x="{{distanceX}}" out-of-bounds="true" direction="horizontal" inertia="{{true}}" @change.stop="movableViewChange" @touchend.stop="movableViewTouchEnd">
+          <view class="left">
+            <view class="head">{{item.subject}}</view>
+            <view class="list">
+              <view class="list-text">考试时间：{{item.time}}</view>
+              <view class="list-text">考试地点：{{item.place}}</view>
+              <view class="list-text">任课老师：{{item.teacher}}</view>
+            </view>
+          </view>
+          <view class="remain" style="color: {{item.remain===0 ? '#FF3939':item.remain === 1 ?'#FFB660':'#89D590'}}">{{item.remain===0 ? "今天":item.remain === 1 ? "明天":item.remain+'天后'}}</view>
+        </movable-view>
+      </movable-area>
+      <view hidden="{{isFinished}}" class="hidden-btn" @tap.stop="down" data-originIndex="{{item.originIndex}}" data-courseCode="{{item.courseCode}}" data-courseTeacher="{{item.teacher}}">删除</view>
+    </view>
+    <view style="{{isFinished&&!show?'height:86rpx;':''}}" class="finish" @tap.stop="toggle" wx:else>
+      <view class="left">
+        <view class="head">{{item.subject}}</view>
+        <view class="list" hidden="{{isFinished && !show}}">
+          <view class="list-text">考试时间：{{item.time}}</view>
+          <view class="list-text">考试地点：{{item.place}}</view>
+          <view class="list-text">任课老师：{{item.teacher}}</view>
+        </view>
+      </view>
+      <!-- <image class="up" src="https://static.airbob.org/under-graduate/%E5%80%92%E8%AE%A1%E6%97%B6/%E7%AE%AD%E5%A4%B4.png" @tap.stop="up" data-originIndex="{{item.originIndex}}" data-courseCode="{{item.courseCode}}" data-courseTeacher="{{item.teacher}}"/> -->
+    </view>
+	</view>
+</template>
+
+<script>
+import wepy from "wepy";
+// 两种状态是否已经结束
+export default class SubjectCard extends wepy.component {
+  props = {
+    item: Object,
+    isFinished: Boolean,
+    bg: {
+      type: String,
+      default: ""
+    },
+    show: {
+      type: Boolean, // 已经完成的考试隐藏详情。只有isFinished为true时生效
+      default: false
+    },
+    distanceX: {
+      type: Number,
+      default: 0
+    }
+  };
+  methods = {
+    async movableViewTouchEnd(e) {
+      this.$emit("movableViewTouchEnd");
+    },
+    async movableViewChange(e) {
+      const { x, source } = e.detail;
+      const alloweds = ["touch", "out-of-bounds"];
+      if (alloweds.includes(source)) {
+        this.$emit(
+          "movableViewChange",
+          this.$index,
+          x < -60 ? -120 + x : 10 - x
+        );
+      }
+    },
+    async toggle(e) {
+      this.$emit("showchange", this.$index);
+    },
+    async up(e) {
+      const res = await wepy.showModal({
+        content: "是否恢复该课程？",
+        confirmColor: "#47CFF5"
+      });
+      if (res.confirm) {
+        this.$emit(
+          "up",
+          e.target.dataset.originindex,
+          e.target.dataset.coursecode,
+          e.target.dataset.courseteacher
+        );
+      }
+    },
+    async down(e) {
+      const res = await wepy.showModal({
+        content: "是否删除该课程？",
+        confirmColor: "#47CFF5"
+      });
+      if (res.confirm) {
+        // 把课程号和originIndex发到Page中
+        this.$emit(
+          "down",
+          e.target.dataset.originindex,
+          e.target.dataset.coursecode,
+          e.target.dataset.courseteacher
+        );
+      }
+    }
+  };
+}
+</script>
+<style lang="stylus" scoped>
+.finished-container
+  padding-top 23rpx
+.container
+  width 725rpx
+  height 242rpx
+  .finish
+    display flex
+    align-items center
+    justify-content space-between
+    // height 90%
+    background-color #f5f5f5
+    border-radius 30rpx
+    width 562rpx
+    padding 0 50rpx 0 50rpx
+    margin 0 auto
+    .left
+      .list
+        .list-text
+          line-height 40rpx
+          font-size 24rpx
+          margin 10rpx 0rpx
+      .head
+        font-size 35rpx
+        line-height 50rpx
+        margin 10px auto
+    .up
+      width 39rpx
+      height 36rpx
+    .hidden-btn
+      background-color #FF3B30
+      color #ffffff
+      height 260rpx
+      width 260rpx
+      line-height 51rpx
+      text-align center
+      border none
+      font-size 40rpx
+  .unfinish
+    display flex
+    align-items center
+    justify-content space-between
+    width 100vw
+    height 100%
+    // border-radius 30rpx
+    overflow hidden
+    movable-area
+      height 242rpx
+      width 727rpx
+      movable-view
+        height 242rpx
+        width 727rpx
+        background-color #ffffff
+        display flex
+        padding-left 50rpx
+        align-items center
+        justify-content space-between
+        .list
+          .list-text
+            line-height 40rpx
+            font-size 24rpx
+            margin 10rpx 0rpx
+        .left
+          .head
+            font-size 35rpx
+            line-height 50rpx
+            margin 10px auto
+        .up
+          width 39rpx
+          height 36rpx
+        .remain
+          font-size 40rpx
+          margin-right 60rpx
+    .hidden-btn
+      background-color #FF3B30
+      color #ffffff
+      height 242rpx
+      width 243rpx
+      line-height 242rpx
+      text-align center
+      border none
+      font-size 40rpx
+</style>
+

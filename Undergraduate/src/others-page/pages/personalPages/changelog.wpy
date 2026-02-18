@@ -1,0 +1,76 @@
+<template>
+  <view>
+    <qy-navigation :title="navTitle"></qy-navigation>
+    <view style="box-sizing: border-box;width: 100vw">
+      <view style="margin-left: 70rpx" id="scroll-view">
+        <repeat for="{{logList}}" key="index">
+          <change-log-item :log="item"/>
+        </repeat>
+      </view>
+      <view class="toTop" @tap="toTop">Top</view>
+    </view>
+  </view>
+</template>
+
+<script>
+import wepy from "wepy";
+import navigation from "@/components/qy-navigation";
+import changeLogItem from "../../components/changeLogItem";
+import { getUpdateLog } from "@/mock/common";
+
+export default class extends wepy.page {
+  config = {
+    navigationBarTitleText: "更新日志"
+  };
+  components = {
+    "change-log-item": changeLogItem,
+    "qy-navigation": navigation
+  };
+  data = {
+    navTitle: "更新日志",
+    logList: [
+      {
+        title: "小程序持续更新中",
+        content: ""
+      }
+    ]
+  };
+  methods = {
+    toTop() {
+      wepy.pageScrollTo({
+        scrollTop: 0,
+        duration: 300
+      });
+    }
+  };
+  async onLoad() {
+    try {
+      wepy.showLoading({
+        title: "加载更新日志中...", //提示的内容,
+        mask: true //显示透明蒙层，防止触摸穿透,
+      });
+      const {
+        data: { data }
+      } = await getUpdateLog();
+      this.logList = data;
+      this.$apply();
+    } finally {
+      wepy.hideLoading();
+    }
+  }
+}
+</script>
+
+<style lang="stylus" scoped>
+.toTop
+  display inline-block
+  width 80rpx
+  height 80rpx
+  margin 0 0 50rpx 50rpx
+  border-radius 50%
+  color #ffffff
+  font-size 36rpx
+  line-height 80rpx
+  text-align center
+  background #f65758
+</style>

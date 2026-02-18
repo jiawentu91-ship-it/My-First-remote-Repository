@@ -1,0 +1,443 @@
+<template>
+  <view class="mask-container" hidden="{{!open}}" animation="{{coverAnimation}}">
+    <view class="pay-container" style="height: {{soterPay ? '635rpx' : '770rpx'}}">
+      <image
+        @tap.stop="closeModal"
+        mode="widthFix"
+        src="https://static.airbob.org/under-graduate/charge/btu_close.png"
+        class="close"
+      />
+      <view class="confirm">确认充值</view>
+      <view class="change-pay-type" @tap="changePayType" wx:if="{{isSoterAble && failPayTimes < 5}}">{{ soterPay ? "输入密码" : "使用指纹" }}</view>
+      <block>
+        <view class="charge-text">￥ {{showCharge}}</view>
+        <view class="small-list">
+          <view class="text1">操作内容</view>
+          <view class="text2">{{operateContent}}</view>
+        </view>
+        <view class="small-list">
+          <view class="text1">充值方式</view>
+          <view class="text2">{{payWay}}</view>
+        </view>
+        <view wx:if="{{open && soterPay}}" class="confirm-button">
+          <button class="pay-button" @tap.stop="handlePay">确认支付</button>
+        </view>
+        <view wx:if="{{open && !soterPay}}">
+          <Pw color="black"/>
+        </view>
+      </block>
+    </view>
+  </view>
+</template>
+
+<script>
+// 支付流程
+import wepy from "wepy";
+import Pw from "./pwdfield";
+import {
+  transferCard,
+  transferNet,
+  transferEle,
+  verifyFingerPrint
+} from "@/api/campusCard";
+
+export default class PayFlow extends wepy.component {
+  props = {
+    charge: {
+      default: 0,
+      type: [Number, String],
+      twoWay: true
+    },
+    payWay: String,
+    operateContent: String,
+    open: {
+      default: false,
+      type: Boolean,
+      twoWay: true
+    },
+    electricURL: {
+      type: String,
+      twoWay: true,
+      default: "" // 只有电费才用这个
+    },
+    type: String // 充值的类型 card net electric
+  };
+  components = {
+    Pw
+  };
+  data = {
+    coverAnimation: {},
+    password: "",
+    showCharge: 0,
+    //  是否支持生物认证
+    isSoterAble: false,
+    //  支付方式
+    soterPay: false,
+    //  识别失败次数，大于5次后使用密码支付
+    failPayTimes: 0
+  };
+  watch = {
+    open: next => {
+      const coverAnimation = wepy.createAnimation({
+        timingFunction: "ease-in-out"
+      });
+      if (next) {
+        this.coverAnimation = coverAnimation
+          .backgroundColor("rgba(0,0,0,0.5)")
+          .step()
+          .export();
+      } else {
+        this.coverAnimation = coverAnimation
+          .backgroundColor("rgba(0,0,0,0)")
+          .step()
+          .export();
+      }
+      this.$invoke("Pw", "clear");
+      this.$apply();
+    },
+    charge: next => {
+      if (typeof next === "number") {
+        this.showCharge = next.toFixed(2);
+        this.$apply();
+      }
+    }
+  };
+  events = {
+    value: val => {
+      // 发起支付
+      this.password = val;
+      this.enterPay();
+      this.$apply();
+    }
+  };
+  methods = {
+    closeModal() {
+      this.handleGG();
+    },
+    handlePay() {
+      wx.startSoterAuthentication({
+        requestAuthModes: ["facial", "fingerPrint"],
+        challenge: wepy.getStorageSync("token"),
+        authContent: "验证身份进行支付",
+        success: async res => {
+          const { resultJSON, resultJSONSignature } = res;
+          //  验证指纹
+          wepy.showLoading({
+            title: "正在验证"
+          });
+          const { code } = await wepy.login();
+          verifyFingerPrint(resultJSON, resultJSONSignature, code).then(
+            verifyResponse => {
+              const {
+                data: { data, success }
+              } = verifyResponse;
+              wepy.hideLoading();
+              if (success && data.is_ok) {
+                //  密码赋值，调支付接口
+                this.password = data.password;
+                this.enterPay();
+              } else {
+                if (++this.failPayTimes >= 5) {
+                  wepy.showToast({
+                    title: "失败次数过多，请使用密码支付",
+                    icon: "none",
+                    duration: 1500
+                  });
+                } else {
+                  wepy.showToast({
+                    title: "验证失败，请重试！",
+                    icon: "none",
+                    duration: 1500
+                  });
+                  ++this.failPayTimes;
+                }
+              }
+              this.$apply();
+            }
+          );
+        },
+        fail: res => {
+          const { errCode } = res;
+          switch (errCode) {
+            //  重试次数过多冻结
+            case 90010:
+              wepy.showToast({
+                title: "失败次数过多，请使用密码支付",
+                icon: "none",
+                duration: 1500
+              });
+              this.failPayTimes = 999;
+              this.soterPay = false;
+              break;
+            //  识别失败
+            case 90009:
+              if (++this.failPayTimes >= 5) {
+                wepy.showToast({
+                  title: "失败次数过多，请使用密码支付",
+                  icon: "none",
+                  duration: 1500
+                });
+                this.soterPay = false;
+              } else {
+                wepy.showToast({
+                  title: "识别失败，请重试",
+                  icon: "none",
+                  duration: 1500
+                });
+              }
+              break;
+            //  用户取消授权
+            case 90008:
+              this.handleGG();
+              break;
+            //  锁屏
+            case 90007:
+              wepy.showToast({
+                title: "验证已取消，请重新支付",
+                icon: "none",
+                duration: 1500
+              });
+              break;
+            //  内部错误
+            default:
+              wepy.showToast({
+                title: "未知错误，请使用密码支付",
+                icon: "none",
+                duration: 1500
+              });
+              this.soterPay = false;
+          }
+          this.$apply();
+        }
+      });
+    },
+    changePayType() {
+      this.soterPay = !this.soterPay;
+    }
+  };
+  handleGG() {
+    this.open = false;
+    this.soterPay = this.isSoterAble && this.failPayTimes < 5;
+    this.charge = "";
+    this.$invoke("Pw", "clear");
+    this.$apply();
+  }
+  chargeCard() {
+    // 充值校园卡
+    transferCard(this.charge * 100, this.password).then(res => {
+      wepy.hideLoading();
+      if (res.data) {
+        // 充值成功
+        const resData = JSON.parse(res.data.data);
+        if (resData.transfer.retcode === "0") {
+          wepy.showToast({
+            title: "充值成功",
+            icon: "success",
+            duration: 2000
+          });
+          this.handleGG();
+        } else {
+          // 余额不足之类的
+          wepy
+            .showModal({
+              content: resData.transfer.errmsg,
+              confirmText: "知道了",
+              showCancel: false,
+              confirmColor: "#353535"
+            })
+            .then(res => {
+              this.handleGG();
+            });
+        }
+      }
+      this.$apply();
+    });
+  }
+  chargeNet() {
+    // 充值网费
+    transferNet(this.charge * 100, this.password).then(res => {
+      wepy.hideLoading();
+      if (res.data) {
+        // 密码正确的情况
+        const resData = JSON.parse(res.data.data);
+        if (resData.pay_net_gdc.retcode === "0") {
+          // 充值成功
+          wepy.showToast({
+            title: "充值成功",
+            icon: "success",
+            duration: 2000
+          });
+          this.handleGG();
+        } else {
+          // 余额不足之类的
+          wepy
+            .showModal({
+              content: resData.pay_net_gdc.errmsg,
+              confirmText: "知道了",
+              showCancel: false,
+              confirmColor: "#353535"
+            })
+            .then(res => {
+              this.handleGG();
+            });
+        }
+      }
+    });
+  }
+  async chargeEle() {
+    //充值电费
+    transferEle(this.electricURL, this.charge * 100, this.password).then(
+      res => {
+        wepy.hideLoading();
+        if (res.data) {
+          // 密码正确的情况
+          const resData = JSON.parse(res.data.data);
+          if (resData.pay_elec_gdc.retcode === "0") {
+            // 充值成功
+            wepy.showToast({
+              title: "充值成功",
+              icon: "success",
+              duration: 2000
+            });
+            this.handleGG();
+          } else {
+            // 余额不足之类
+            wepy
+              .showModal({
+                content: resData.pay_elec_gdc.errmsg,
+                confirmText: "知道了",
+                showCancel: false,
+                confirmColor: "#353535"
+              })
+              .then(res => {
+                this.handleGG();
+              });
+          }
+        }
+      }
+    );
+  }
+  enterPay() {
+    wepy.showLoading({
+      title: "正在发起支付"
+    });
+    switch (this.type) {
+      case "card":
+        this.chargeCard();
+        break;
+      case "net":
+        this.chargeNet();
+        break;
+      case "electric":
+        this.chargeEle();
+        break;
+    }
+  }
+  onLoad() {
+    if (wx.canIUse("checkIsSupportSoterAuthentication")) {
+      wx.checkIsSupportSoterAuthentication({
+        success: res => {
+          //  检查设备是否支持人脸识别/指纹，优先人脸
+          const soterType = res.supportMode.includes("facial")
+            ? "facial"
+            : res.supportMode.includes("fingerPrint")
+            ? "fingerPrint"
+            : "";
+          if (soterType) {
+            //  检查设备是否录入信息
+            wx.checkIsSoterEnrolledInDevice({
+              checkAuthMode: soterType,
+              success: res => {
+                if (res.isEnrolled) {
+                  this.isSoterAble = this.soterPay = true;
+                } else {
+                  this.isSoterAble = this.soterPay = false;
+                }
+              }
+            });
+          } else {
+            this.isSoterAble = this.soterPay = false;
+          }
+        },
+        fail: () => {
+          this.isSoterAble = this.soterPay = false;
+        }
+      });
+    } else {
+      this.isSoterAble = this.soterPay = false;
+    }
+  }
+}
+</script>
+
+<style lang="stylus" scoped>
+.mask-container
+  width 100vw
+  height 100vh
+  position fixed
+  bottom 0
+  background-color rgba(0, 0, 0, 0.5)
+  z-index 100
+  .pay-container
+    position absolute
+    bottom 0
+    height 770rpx
+    background-color rgb(255, 255, 255)
+    display flex
+    flex-direction column
+    align-items center
+    width 100%
+    .confirm-button
+      width 100vw
+      margin-top 60rpx
+      .pay-button
+        margin 16rpx auto
+        background-color #47cff5
+        color #fff
+        width 38%
+        border-radius 48rpx
+    .close
+      width 35rpx
+      position absolute
+      top 25rpx
+      left 22rpx
+    .change-pay-type
+      position absolute 
+      top 41rpx
+      right 22rpx
+      transform translateY(-50%)
+      color #47cff5
+    .charge-text
+      font-size 80rpx
+      color #353535
+      font-weight bold
+      margin 35rpx 0 60rpx
+    .confirm
+      width 100%
+      height 82rpx
+      line-height 82rpx
+      // text-align center
+      justify-content center
+      display flex
+      border-bottom 2rpx solid #E3E3E3
+    .input-password
+      font-size 27rpx
+      border-bottom 2rpx solid black
+      width 438rpx
+      text-align center
+      margin-top 84rpx
+    .small-list
+      display flex
+      justify-content space-between
+      width 90%
+      border-bottom 2rpx solid #E3E3E3
+      height 60rpx
+      line-height 60rpx
+      .text1
+        font-size 30rpx
+        color #888888
+      .text2
+        font-size 30rpx
+        color #353535
+</style>
+
